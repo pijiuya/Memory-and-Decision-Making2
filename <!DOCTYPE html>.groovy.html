@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<body>
+<pre id="snake-art" style="font-family: 'Courier New', monospace; font-size: 12px; color: #76c7c0; background: #1a1a1a;"></pre>
+
+<script>
+const snakeASCII = [
+  "                ╚⊙ ⊙╝                ",
+  "           ▐██████████████▌          ",
+  "         ▄█▓▒░░░░░░░░░░░░░▒▓█▄       ",
+  "       ▄▓▒░░░░░░░░░░░░░░░░░░░▒▓▄     ",
+  "      █▒░░░[ HAPPY SNAKE YEAR ]░▒█   ",
+  "     ▓░░░░░░░░░░░░░░░░░░░░░░░░░░▓    ",
+  "    ▓░░░░▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄░░░░▓   ",
+  "   ▐▓░░▒█████████████████████▒░░▓▌  ",
+  "   ▓▒░░▒█▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀█▒░░▒▓  ",
+  "  ▐▓░░░▒█▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒█▒░░░▓▌ ",
+  "  ▓▒░░░▒█▒════════════════▒█▒░░░▒▓ ",
+  "  ▓░░░░▒█▒  ░░  ░░  ░░  ░▒█▒░░░░▓ ",
+  " ▐▓░░░░▒█▒  ░░  ░░  ░░  ░▒█▒░░░░▓▌",
+  " ▓▒░░░░▒██▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄██▒░░░░▒▓",
+  " ▓░░░░░░░░▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀░░░░░░░░▓",
+  "▐▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▓▌",
+  "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀"
+].join('\n');
+
+const artElement = document.getElementById('snake-art');
+artElement.textContent = snakeASCII;
+
+// 动画参数
+let direction = 1;
+let position = 0;
+const amplitude = 1; // 摆动幅度
+const speed = 0.1;    // 移动速度
+
+function animate() {
+  // 使用正弦函数创造平滑摆动
+  position = Math.sin(Date.now() * speed) * amplitude;
+  artElement.style.transform = `translateX(${position}px)`;
+  requestAnimationFrame(animate);
+}
+
+animate();
+</script>
+
+</body>
+</html>
