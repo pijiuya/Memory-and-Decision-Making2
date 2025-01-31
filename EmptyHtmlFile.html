@@ -1,0 +1,263 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>可探索地形生成器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            user-select: none;
+        }
+        body {
+            background: #0a0a0a;
+        }
+        #map {
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 90%;
+            white-space: pre;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            filter: contrast(1.2);
+        }
+        .river { 
+            color: #48d1cc;
+            animation: flow 1.5s ease-in-out infinite;
+        }
+        .mountain {
+            animation: float 4s ease-in-out infinite;
+        }
+        .forest {
+            animation: sway 3s ease-in-out infinite;
+        }
+        .stone {
+            animation: pulse 5s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-2px); }
+        }
+        @keyframes sway {
+            0%, 100% { transform: translateX(-1px); }
+            50% { transform: translateX(1px); }
+        }
+        @keyframes flow {
+            0% { opacity: 0.8; }
+            50% { opacity: 1; transform: translateX(1px); }
+            100% { opacity: 0.8; }
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <script>
+        const terrain = {
+            MOUNTAIN: { 
+                chars: ['▲','△','⛰','🗻','∧','≒','⋀','⫱'], 
+                weight: 0.15,
+                class: 'mountain'
+            },
+            FOREST:   { 
+                chars: ['♣','♠','🌲','🎋','🌳','🍃','¿','‡'], 
+                weight: 0.25,
+                class: 'forest'
+            },
+            PLAINS:   { 
+                chars: ['·','˚','˙','¨','⁚','∘','∙','⋮'], 
+                weight: 0.5,
+                class: ''
+            },
+            STONE:    { 
+                chars: ['◼','◗','●','◆','■','□','◈','◉'], 
+                weight: 0.1,
+                class: 'stone'
+            }
+        };
+
+        class RiverSystem {
+            constructor(cols, rows) {
+                this.cols = cols;
+                this.rows = rows;
+                this.mainRiver = this.generateMainRiver();
+                this.tributaries = this.generateTributaries();
+            }
+
+            generateMainRiver() {
+                const isVertical = Math.random() > 0.5;
+                const path = [];
+                let x = isVertical ? this.cols/2 : -10;
+                let y = isVertical ? -10 : this.rows/2;
+                
+                while(x < this.cols+10 && y < this.rows+10) {
+                    path.push({x: Math.floor(x), y: Math.floor(y)});
+                    if (isVertical) {
+                        y += 1;
+                        x += Math.sin(y*0.3)*0.8;
+                    } else {
+                        x += 1;
+                        y += Math.cos(x*0.2)*0.5;
+                    }
+                }
+                return path;
+            }
+
+            generateTributaries() {
+                return Array.from({length: 3+Math.floor(Math.random()*3)}, () => {
+                    const tributary = this.generateMainRiver();
+                    return tributary.map(p => ({
+                        x: p.x + Math.sin(p.y)*5,
+                        y: p.y + Math.cos(p.x)*3
+                    }));
+                });
+            }
+
+            isRiver(x, y) {
+                const check = (path) => path.some(p => 
+                    Math.abs(p.x - x) < 1.5 && 
+                    Math.abs(p.y - y) < 1.5
+                );
+                return check(this.mainRiver) || this.tributaries.some(check);
+            }
+        }
+
+        class BiomeGenerator {
+            constructor(cols, rows) {
+                this.noiseMap = this.generateNoise(cols, rows);
+            }
+
+            generateNoise(cols, rows) {
+                const noise = [];
+                const scale = 0.1;
+                for(let y = 0; y < rows; y++) {
+                    noise[y] = [];
+                    for(let x = 0; x < cols; x++) {
+                        noise[y][x] = Math.abs(
+                            Math.sin(x*scale) * Math.cos(y*scale) +
+                            Math.sin(x*scale*0.5) * Math.cos(y*scale*0.5)*0.5
+                        );
+                    }
+                }
+                return noise;
+            }
+
+            getBiome(x, y) {
+                const value = this.noiseMap[y][x];
+                if (value > 0.8) return 'MOUNTAIN';
+                if (value > 0.6) return 'STONE';
+                if (value > 0.4) return 'FOREST';
+                return 'PLAINS';
+            }
+        }
+
+        class Player {
+            constructor() {
+                this.avatars = ['👶','🧑','👨','👩','👱','🧔','🦸','🧙','🧛','👽'];
+                this.char = this.avatars[Math.floor(Math.random()*this.avatars.length)];
+                this.x = 0;
+                this.y = 0;
+            }
+        }
+
+        let playerInstance;
+        let cols, rows;
+        let mapData = [];
+
+        function generateMap() {
+            const biomeGen = new BiomeGenerator(cols, rows);
+            const river = new RiverSystem(cols, rows);
+            
+            mapData = Array.from({length: rows}, (_, y) => 
+                Array.from({length: cols}, (_, x) => {
+                    if (river.isRiver(x, y)) {
+                        return {
+                            char: Math.random() > 0.9 ? '≈' : '~',
+                            class: 'river',
+                            style: `animation-delay: ${Math.random()*2}s`
+                        };
+                    }
+                    const biome = biomeGen.getBiome(x, y);
+                    const chars = terrain[biome].chars;
+                    return {
+                        char: chars[Math.floor(Math.random() * chars.length)],
+                        class: terrain[biome].class,
+                        style: `animation-delay: ${Math.random()*3}s`
+                    };
+                })
+            );
+
+            // 设置玩家初始位置
+            playerInstance = new Player();
+            playerInstance.x = Math.floor(cols / 2);
+            playerInstance.y = Math.floor(rows / 2);
+            updateMap();
+        }
+
+        function updateMap() {
+            const mapElement = document.getElementById('map');
+            const mapContent = mapData.map((row, y) => 
+                row.map((cell, x) => {
+                    if (x === playerInstance.x && y === playerInstance.y) {
+                        return playerInstance.char;
+                    }
+                    return `<span class="${cell.class}" style="${cell.style}">${cell.char}</span>`;
+                }).join('')
+            ).join('\n');
+            mapElement.innerHTML = mapContent;
+        }
+
+        function movePlayer(dx, dy) {
+            const newX = playerInstance.x + dx;
+            const newY = playerInstance.y + dy;
+            
+            if (newX >= 0 && newX < cols && newY >= 0 && newY < rows) {
+                playerInstance.x = newX;
+                playerInstance.y = newY;
+                updateMap();
+            }
+        }
+
+        const keys = {w:0, a:0, s:0, d:0};
+        window.addEventListener('keydown', (e) => {
+            const k = e.key.toLowerCase();
+            if ('wasd'.includes(k)) {
+                keys[k] = 1;
+                e.preventDefault();
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            const k = e.key.toLowerCase();
+            if ('wasd'.includes(k)) keys[k] = 0;
+        });
+
+        function gameLoop() {
+            const moveX = keys.d - keys.a;
+            const moveY = keys.s - keys.w;
+            
+            if (moveX || moveY) {
+                movePlayer(moveX, moveY);
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        function init() {
+            cols = Math.floor(window.innerWidth / 9);
+            rows = Math.floor(window.innerHeight / 16);
+            generateMap();
+            gameLoop();
+        }
+
+        window.addEventListener('resize', init);
+        init();
+    </script>
+</body>
+</html>
