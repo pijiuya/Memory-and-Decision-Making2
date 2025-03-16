@@ -1,263 +1,378 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
-    <title>可探索地形生成器</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            user-select: none;
-        }
-        body {
-            background: #0a0a0a;
-        }
-        #map {
-            color: #fff;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            line-height: 90%;
-            white-space: pre;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            filter: contrast(1.2);
-        }
-        .river { 
-            color: #48d1cc;
-            animation: flow 1.5s ease-in-out infinite;
-        }
-        .mountain {
-            animation: float 4s ease-in-out infinite;
-        }
-        .forest {
-            animation: sway 3s ease-in-out infinite;
-        }
-        .stone {
-            animation: pulse 5s ease-in-out infinite;
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-2px); }
-        }
-        @keyframes sway {
-            0%, 100% { transform: translateX(-1px); }
-            50% { transform: translateX(1px); }
-        }
-        @keyframes flow {
-            0% { opacity: 0.8; }
-            50% { opacity: 1; transform: translateX(1px); }
-            100% { opacity: 0.8; }
-        }
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-        }
-    </style>
+  <title>可探索地形生成器</title>
+  <style>
+    /* 基础样式 [T0](1) */
+    * {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      user-select: none;
+    }
+    body {
+      background: #0a0a0a;
+    }
+    #map {
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      line-height: 90%;
+      white-space: pre;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(1); /* 用于放大缩小 [AI KNOWLEDGE]({}) */
+      filter: contrast(1.2);
+      display: none; /* 初始时先隐藏地图，等待按下Enter后再显示 */
+    }
+    .river {
+      color: #48d1cc;
+      animation: flow 1.5s ease-in-out infinite;
+    }
+    .mountain {
+      animation: float 4s ease-in-out infinite;
+    }
+    .forest {
+      animation: sway 3s ease-in-out infinite;
+    }
+    .stone {
+      animation: pulse 5s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-2px); }
+    }
+    @keyframes sway {
+      0%, 100% { transform: translateX(-1px); }
+      50% { transform: translateX(1px); }
+    }
+    @keyframes flow {
+      0% { opacity: 0.8; }
+      50% { opacity: 1; transform: translateX(1px); }
+      100% { opacity: 0.8; }
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    /* 标题UI样式 [AI KNOWLEDGE]({}) */
+    #title-screen {
+      position: fixed;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #0f0;
+      font-family: monospace;
+      z-index: 9999;
+    }
+    #ascii-title {
+      font-size: 18px;
+      white-space: pre;
+      margin-bottom: 2vh;
+    }
+    #big-emoji {
+      font-size: 64px;
+      margin-bottom: 2vh;
+    }
+    #blink-text {
+      font-size: 16px;
+      animation: blink 1s infinite;
+    }
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+  </style>
 </head>
 <body>
-    <div id="map"></div>
+  <!-- 标题UI界面 [AI KNOWLEDGE]({}) -->
+  <div id="title-screen">
+    <div id="ascii-title"></div>
+    <div id="big-emoji"></div>
+    <div id="blink-text">Press Enter to Start</div>
+  </div>
 
-    <script>
-        const terrain = {
-            MOUNTAIN: { 
-                chars: ['▲','△','⛰','🗻','∧','≒','⋀','⫱'], 
-                weight: 0.15,
-                class: 'mountain'
-            },
-            FOREST:   { 
-                chars: ['♣','♠','🌲','🎋','🌳','🍃','¿','‡'], 
-                weight: 0.25,
-                class: 'forest'
-            },
-            PLAINS:   { 
-                chars: ['·','˚','˙','¨','⁚','∘','∙','⋮'], 
-                weight: 0.5,
-                class: ''
-            },
-            STONE:    { 
-                chars: ['◼','◗','●','◆','■','□','◈','◉'], 
-                weight: 0.1,
-                class: 'stone'
-            }
-        };
+  <!-- 地图容器 [T0](1) -->
+  <div id="map"></div>
 
-        class RiverSystem {
-            constructor(cols, rows) {
-                this.cols = cols;
-                this.rows = rows;
-                this.mainRiver = this.generateMainRiver();
-                this.tributaries = this.generateTributaries();
-            }
+  <script>
+    /* 地形配置 [T1](2) */
+    const terrain = {
+      MOUNTAIN: {
+        chars: ['▲','△','⛰','🗻','∧','≒','⋀','⫱'],
+        weight: 0.15,
+        class: 'mountain'
+      },
+      FOREST: {
+        chars: ['♣','♠','🌲','🎋','🌳','🍃','¿','‡'],
+        weight: 0.25,
+        class: 'forest'
+      },
+      PLAINS: {
+        chars: ['·','˚','˙','¨','⁚','∘','∙','⋮'],
+        weight: 0.5,
+        class: ''
+      },
+      STONE: {
+        chars: ['◼','◗','●','◆','■','□','◈','◉'],
+        weight: 0.1,
+        class: 'stone'
+      }
+    };
 
-            generateMainRiver() {
-                const isVertical = Math.random() > 0.5;
-                const path = [];
-                let x = isVertical ? this.cols/2 : -10;
-                let y = isVertical ? -10 : this.rows/2;
-                
-                while(x < this.cols+10 && y < this.rows+10) {
-                    path.push({x: Math.floor(x), y: Math.floor(y)});
-                    if (isVertical) {
-                        y += 1;
-                        x += Math.sin(y*0.3)*0.8;
-                    } else {
-                        x += 1;
-                        y += Math.cos(x*0.2)*0.5;
-                    }
-                }
-                return path;
-            }
-
-            generateTributaries() {
-                return Array.from({length: 3+Math.floor(Math.random()*3)}, () => {
-                    const tributary = this.generateMainRiver();
-                    return tributary.map(p => ({
-                        x: p.x + Math.sin(p.y)*5,
-                        y: p.y + Math.cos(p.x)*3
-                    }));
-                });
-            }
-
-            isRiver(x, y) {
-                const check = (path) => path.some(p => 
-                    Math.abs(p.x - x) < 1.5 && 
-                    Math.abs(p.y - y) < 1.5
-                );
-                return check(this.mainRiver) || this.tributaries.some(check);
-            }
+    /* 河流系统生成 [T2](3) */
+    class RiverSystem {
+      constructor(cols, rows) {
+        this.cols = cols;
+        this.rows = rows;
+        this.mainRiver = this.generateMainRiver();
+        this.tributaries = this.generateTributaries();
+      }
+      generateMainRiver() {
+        const isVertical = Math.random() > 0.5;
+        const path = [];
+        let x = isVertical ? this.cols/2 : -10;
+        let y = isVertical ? -10 : this.rows/2;
+        while(x < this.cols + 10 && y < this.rows + 10) {
+          path.push({x: Math.floor(x), y: Math.floor(y)});
+          if (isVertical) {
+            y += 1;
+            x += Math.sin(y*0.3)*0.8;
+          } else {
+            x += 1;
+            y += Math.cos(x*0.2)*0.5;
+          }
         }
+        return path;
+      }
+      generateTributaries() {
+        return Array.from({length: 3+Math.floor(Math.random()*3)}, () => {
+          const tributary = this.generateMainRiver();
+          return tributary.map(p => ({
+            x: p.x + Math.sin(p.y)*5,
+            y: p.y + Math.cos(p.x)*3
+          }));
+        });
+      }
+      isRiver(x, y) {
+        const check = (path) =>
+          path.some(p => Math.abs(p.x - x) < 1.5 && Math.abs(p.y - y) < 1.5);
+        return check(this.mainRiver) || this.tributaries.some(check);
+      }
+    }
 
-        class BiomeGenerator {
-            constructor(cols, rows) {
-                this.noiseMap = this.generateNoise(cols, rows);
-            }
-
-            generateNoise(cols, rows) {
-                const noise = [];
-                const scale = 0.1;
-                for(let y = 0; y < rows; y++) {
-                    noise[y] = [];
-                    for(let x = 0; x < cols; x++) {
-                        noise[y][x] = Math.abs(
-                            Math.sin(x*scale) * Math.cos(y*scale) +
-                            Math.sin(x*scale*0.5) * Math.cos(y*scale*0.5)*0.5
-                        );
-                    }
-                }
-                return noise;
-            }
-
-            getBiome(x, y) {
-                const value = this.noiseMap[y][x];
-                if (value > 0.8) return 'MOUNTAIN';
-                if (value > 0.6) return 'STONE';
-                if (value > 0.4) return 'FOREST';
-                return 'PLAINS';
-            }
-        }
-
-        class Player {
-            constructor() {
-                this.avatars = ['👶','🧑','👨','👩','👱','🧔','🦸','🧙','🧛','👽'];
-                this.char = this.avatars[Math.floor(Math.random()*this.avatars.length)];
-                this.x = 0;
-                this.y = 0;
-            }
-        }
-
-        let playerInstance;
-        let cols, rows;
-        let mapData = [];
-
-        function generateMap() {
-            const biomeGen = new BiomeGenerator(cols, rows);
-            const river = new RiverSystem(cols, rows);
-            
-            mapData = Array.from({length: rows}, (_, y) => 
-                Array.from({length: cols}, (_, x) => {
-                    if (river.isRiver(x, y)) {
-                        return {
-                            char: Math.random() > 0.9 ? '≈' : '~',
-                            class: 'river',
-                            style: `animation-delay: ${Math.random()*2}s`
-                        };
-                    }
-                    const biome = biomeGen.getBiome(x, y);
-                    const chars = terrain[biome].chars;
-                    return {
-                        char: chars[Math.floor(Math.random() * chars.length)],
-                        class: terrain[biome].class,
-                        style: `animation-delay: ${Math.random()*3}s`
-                    };
-                })
+    /* 生物群系生成 [T2](3) */
+    class BiomeGenerator {
+      constructor(cols, rows) {
+        this.noiseMap = this.generateNoise(cols, rows);
+      }
+      generateNoise(cols, rows) {
+        const noise = [];
+        const scale = 0.1;
+        for(let y = 0; y < rows; y++) {
+          noise[y] = [];
+          for(let x = 0; x < cols; x++) {
+            noise[y][x] = Math.abs(
+              Math.sin(x*scale) * Math.cos(y*scale) +
+              Math.sin(x*scale*0.5) * Math.cos(y*scale*0.5)*0.5
             );
-
-            // 设置玩家初始位置
-            playerInstance = new Player();
-            playerInstance.x = Math.floor(cols / 2);
-            playerInstance.y = Math.floor(rows / 2);
-            updateMap();
+          }
         }
+        return noise;
+      }
+      getBiome(x, y) {
+        const value = this.noiseMap[y][x];
+        if (value > 0.8) return 'MOUNTAIN';
+        if (value > 0.6) return 'STONE';
+        if (value > 0.4) return 'FOREST';
+        return 'PLAINS';
+      }
+    }
 
-        function updateMap() {
-            const mapElement = document.getElementById('map');
-            const mapContent = mapData.map((row, y) => 
-                row.map((cell, x) => {
-                    if (x === playerInstance.x && y === playerInstance.y) {
-                        return playerInstance.char;
-                    }
-                    return `<span class="${cell.class}" style="${cell.style}">${cell.char}</span>`;
-                }).join('')
-            ).join('\n');
-            mapElement.innerHTML = mapContent;
-        }
+    /* 玩家类 [T3](4) */
+    class Player {
+      constructor(char) {
+        this.avatars = ['👶','🧑','👨','👩','👱','🧔','🦸','🧙','🧛','👽'];
+        // 如果有传入emoji则使用，否则从默认列表随机 [AI KNOWLEDGE]({})
+        this.char = char || this.avatars[Math.floor(Math.random() * this.avatars.length)];
+        this.x = 0;
+        this.y = 0;
+      }
+    }
 
-        function movePlayer(dx, dy) {
-            const newX = playerInstance.x + dx;
-            const newY = playerInstance.y + dy;
-            
-            if (newX >= 0 && newX < cols && newY >= 0 && newY < rows) {
-                playerInstance.x = newX;
-                playerInstance.y = newY;
-                updateMap();
+    let playerInstance;
+    let cols, rows;
+    let mapData = [];
+    let mapScale = 1; // 用于放大缩小 [AI KNOWLEDGE]({})
+
+    /* 生成地图 [T3](4) [T4](5) */
+    function generateMap() {
+      const biomeGen = new BiomeGenerator(cols, rows);
+      const river = new RiverSystem(cols, rows);
+
+      // 随机放置一些星星 [AI KNOWLEDGE]({})
+      const starPositions = new Set();
+      for (let i = 0; i < 8; i++) {
+        const sx = Math.floor(Math.random() * cols);
+        const sy = Math.floor(Math.random() * rows);
+        starPositions.add(sx + "," + sy);
+      }
+
+      mapData = Array.from({length: rows}, (_, y) =>
+        Array.from({length: cols}, (_, x) => {
+          if (starPositions.has(x + "," + y)) {
+            return { char: '⭐', class: '', style: '' };
+          }
+          if (river.isRiver(x, y)) {
+            return {
+              char: Math.random() > 0.9 ? '≈' : '~',
+              class: 'river',
+              style: `animation-delay: ${Math.random()*2}s`
+            };
+          }
+          const biome = biomeGen.getBiome(x, y);
+          const chars = terrain[biome].chars;
+          return {
+            char: chars[Math.floor(Math.random() * chars.length)],
+            class: terrain[biome].class,
+            style: `animation-delay: ${Math.random()*3}s`
+          };
+        })
+      );
+
+      updateMap();
+    }
+
+    /* 更新地图 [T3](4) */
+    function updateMap() {
+      const mapElement = document.getElementById('map');
+      const mapContent = mapData.map((row, y) =>
+        row.map((cell, x) => {
+          if (playerInstance && x === playerInstance.x && y === playerInstance.y) {
+            return playerInstance.char;
+          }
+          return `<span class="${cell.class}" style="${cell.style}">${cell.char}</span>`;
+        }).join('')
+      ).join('\n');
+      mapElement.innerHTML = mapContent;
+    }
+
+    /* 移动玩家并检测星星 [T3](4) */
+    function movePlayer(dx, dy) {
+      const newX = playerInstance.x + dx;
+      const newY = playerInstance.y + dy;
+      if (newX >= 0 && newX < cols && newY >= 0 && newY < rows) {
+        playerInstance.x = newX;
+        playerInstance.y = newY;
+
+        // 如果踩到星星，就把周围变成星空风格 [AI KNOWLEDGE]({})
+        if (mapData[newY][newX].char === '⭐') {
+          for (let yy = -8; yy <= 8; yy++) {
+            for (let xx = -8; xx <= 8; xx++) {
+              let nx = newX + xx;
+              let ny = newY + yy;
+              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                const starryChars = ['.', '*', '✦', '·', 'o', '✨' ,' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' '];
+                const pick = starryChars[Math.floor(Math.random() * starryChars.length)];
+                mapData[ny][nx] = { char: pick, class: '', style: '' };
+              }
             }
+          }
+          // 可以直接清除星星
+          mapData[newY][newX] = { char: ' ', class: '', style: '' };
         }
 
-        const keys = {w:0, a:0, s:0, d:0};
-        window.addEventListener('keydown', (e) => {
-            const k = e.key.toLowerCase();
-            if ('wasd'.includes(k)) {
-                keys[k] = 1;
-                e.preventDefault();
-            }
-        });
-        window.addEventListener('keyup', (e) => {
-            const k = e.key.toLowerCase();
-            if ('wasd'.includes(k)) keys[k] = 0;
-        });
+        updateMap();
+      }
+    }
 
-        function gameLoop() {
-            const moveX = keys.d - keys.a;
-            const moveY = keys.s - keys.w;
-            
-            if (moveX || moveY) {
-                movePlayer(moveX, moveY);
-            }
-            requestAnimationFrame(gameLoop);
-        }
+    const keys = { w:0, a:0, s:0, d:0, q:0, e:0 };
 
-        function init() {
-            cols = Math.floor(window.innerWidth / 9);
-            rows = Math.floor(window.innerHeight / 16);
-            generateMap();
-            gameLoop();
-        }
+    /* 绑定按键 [T4](5) [T5](6) */
+    window.addEventListener('keydown', (e) => {
+      const k = e.key.toLowerCase();
+      if ('wasdqe'.includes(k)) {
+        keys[k] = 1;
+        e.preventDefault();
+      }
+    });
+    window.addEventListener('keyup', (e) => {
+      const k = e.key.toLowerCase();
+      if ('wasdqe'.includes(k)) keys[k] = 0;
+    });
 
-        window.addEventListener('resize', init);
-        init();
-    </script>
+    /* 游戏主循环 [T4](5) */
+    function gameLoop() {
+      const moveX = keys.d - keys.a;
+      const moveY = keys.s - keys.w;
+      if (moveX || moveY) {
+        movePlayer(moveX, moveY);
+      }
+      // 按下Q放大，E缩小 [AI KNOWLEDGE]({})
+      if (keys.q) {
+        mapScale = Math.min(3, mapScale + 0.1);
+        document.getElementById('map').style.transform =
+          `translate(-50%, -50%) scale(${mapScale})`;
+      }
+      if (keys.e) {
+        mapScale = Math.max(0.5, mapScale - 0.1);
+        document.getElementById('map').style.transform =
+          `translate(-50%, -50%) scale(${mapScale})`;
+      }
+      requestAnimationFrame(gameLoop);
+    }
+
+    /* UI - 标题逻辑 [T6](7) */
+    let gameStarted = false;
+    let currentEmoji = '😀';
+    const emojiList = ['😀','😎','😈','🤖','👾','🥳','👶','🧑','👨','👩','👱','🧔','🦸','🧙','🧛','👽'];
+    let asciiFrames = [
+      "  ___  _ ____  _____ ___ \n / _ \\| | ___||  _  | _ \\\n| (_) | |___ \\| |_| |  _/\n \\___/|_|____/ \\____|_|  ",
+      "  __  ____  _____  __  \n  / / / ___||  _  |/ /  \n / /  \\___ \\| |_| / /   \n/_/   |____/ \\____/_/  ",
+      "  _____ ___  ____  ___ \n /  _  | _ \\/ ___|| _ \\\n|  |_| |  _/\\__ \\|  _/\n \\____/|_|  |___/|_|  "
+    ];
+    let asciiIndex = 0;
+
+    function updateAsciiTitle() {
+      document.getElementById("ascii-title").textContent = asciiFrames[asciiIndex];
+      asciiIndex = (asciiIndex + 1) % asciiFrames.length;
+    }
+    function updateEmoji() {
+      currentEmoji = emojiList[Math.floor(Math.random()*emojiList.length)];
+      document.getElementById("big-emoji").textContent = currentEmoji;
+    }
+
+    /* 绑定Enter键开始逻辑 [AI KNOWLEDGE]({}) */
+    window.addEventListener('keydown', (e) => {
+      if (!gameStarted && e.key === "Enter") {
+        document.getElementById("title-screen").style.display = "none";
+        document.getElementById("map").style.display = "block";
+        playerInstance = new Player(currentEmoji);
+        playerInstance.x = Math.floor(cols / 2);
+        playerInstance.y = Math.floor(rows / 2);
+        updateMap();
+        gameStarted = true;
+      }
+    });
+
+    /* 初始化地图与标题 [T5](6) [T7](8) */
+    function init() {
+      cols = Math.floor(window.innerWidth / 9);
+      rows = Math.floor(window.innerHeight / 16);
+      generateMap();
+      if (gameStarted) updateMap();
+      gameLoop();
+    }
+    window.addEventListener('resize', init);
+
+    setInterval(updateAsciiTitle, 1000);
+    setInterval(updateEmoji, 800);
+    init();
+  </script>
 </body>
 </html>
